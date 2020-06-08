@@ -3,7 +3,7 @@
 """
 
 import math
-
+import random
 import numpy as np
 import pandas as pd
 from numpy.random import choice
@@ -252,7 +252,7 @@ def create_dot_graph(treatments, outcome, common_causes,
     return dot_graph
 
 def create_gml_graph(treatments, outcome, common_causes,
-        instruments, effect_modifiers=[]):
+        instruments, effect_modifiers=[], mediator=[]):
     gml_graph = ('graph[directed 1'
                  'node[ id "{0}" label "{0}"]'
                  'node[ id "{1}" label "{1}"]'
@@ -260,6 +260,7 @@ def create_gml_graph(treatments, outcome, common_causes,
                  ).format(outcome, "Unobserved Confounders")
 
     gml_graph +=  " ".join(['node[ id "{0}" label "{0}"]'.format(v) for v in common_causes])
+    gml_graph += " ".join(['node[ id "{0}" label "{0}"]'.format(v) for v in mediator])
     gml_graph += " ".join(['node[ id "{0}" label "{0}"]'.format(v) for v in instruments])
     for currt in treatments:
         gml_graph += ('node[ id "{0}" label "{0}"]'
@@ -267,9 +268,11 @@ def create_gml_graph(treatments, outcome, common_causes,
                      'edge[source "{2}" target "{0}"]'
                      ).format(currt, outcome, "Unobserved Confounders")
         gml_graph +=  " ".join(['edge[ source "{0}" target "{1}"]'.format(v, currt) for v in common_causes])
+        gml_graph += " ".join(['edge[ source "{0}" target "{1}"]'.format(currt, v) for v in mediator])
         gml_graph += " ".join(['edge[ source "{0}" target "{1}"]'.format(v, currt) for v in instruments])
 
     gml_graph = gml_graph + " ".join(['edge[ source "{0}" target "{1}"]'.format(v, outcome) for v in common_causes])
+    gml_graph = gml_graph + " ".join(['edge[ source "{0}" target "{1}"]'.format(v, outcome) for v in mediator])
     gml_graph = gml_graph + " ".join(['node[ id "{0}" label "{0}"] edge[ source "{0}" target "{1}"]'.format(v, outcome) for v in effect_modifiers])
     gml_graph = gml_graph + ']'
     return gml_graph
@@ -315,3 +318,110 @@ def xy_dataset(num_samples, effect=True, sd_error=1):
         "ate": None,
     }
     return ret_dict
+
+def nonlinear_confounder_dataset(num_samples, effect=True, sd_error=1,
+                                treatment_is_binary=True,
+                                outcome_is_binary=False,
+                                mediator_is_binary=False,
+                                function='linear'):
+    treatment = 'Treatment'
+    mediator = 'Mediator'
+    outcome = 'Outcome'
+    common_causes = ['w0']
+    time_var = 's'
+    fun = linear_func
+
+    if function == 'linear':
+        pass
+    elif function == 'logistic':
+        fun = logistic_func
+    elif function == 'log':
+        fun = logarithmic_func
+    elif function == 'exp':
+        fun = exp_func
+    elif function == 'sin':
+        fun = sinusoidal_func
+
+    E1 = np.random.normal(loc=0, scale=sd_error, size=num_samples)
+    E2 = np.random.normal(loc=0, scale=sd_error, size=num_samples)
+    E3 = np.random.normal(loc=0, scale=sd_error, size=num_samples)
+
+    S = np.random.uniform(0, 10, num_samples)
+    T1 = 4 - (S - 3) * (S - 3)
+    T1[S >= 5] = 0
+    T2 = (S - 7) * (S - 7) - 4
+    T2[S <= 5] = 0
+    W = T1 + T2  # hidden confounder
+
+    if effect:
+        V = 6 + W + E1
+        Z = linear_func(V) + E2
+        Y = fun(V) + linear_func(Z) + E3
+    else:
+        V = 6 + W + E1
+        Z = linear_func(V) + E2
+        Y = 12 + linear_func(Z) + E3
+
+    if treatment_is_binary:
+        V = np.vectorize(stochastically_convert_to_binary)(V)
+    if outcome_is_binary:
+        Y = np.vectorize(stochastically_convert_to_binary)(Y)
+    if mediator_is_binary:
+        Z = np.vectorize(stochastically_convert_to_binary)(Z)
+    # Now writing the gml graph
+    gml_graph = create_gml_graph(V, Y, common_causes, mediator=Z, instruments=[])
+    dat = {
+        treatment: V,
+        mediator: Z,
+        outcome: Y,
+        common_causes[0]: W,
+        time_var: S
+    }
+    data = pd.DataFrame(data=dat)
+
+    ret_dict = {
+        "df": data,
+        "treatment_name": treatment,
+        "mediator_name": mediator,
+        "outcome_name": outcome,
+        "function_name": function,
+        "common_causes_names": common_causes,
+        "time_val": time_var,
+        "instrument_names": None,
+        "dot_graph": None,
+        "gml_graph": gml_graph,
+        "ate": None,
+    }
+    return ret_dict
+
+def logarithmic_func(x):
+    a = random.randint(1, 10)
+    b = random.randint(1, 10)
+    c = random.randint(1, 10)
+    return a * (b**x) + c
+
+def linear_func(x):
+    a = random.randint(1, 10)
+    b = random.randint(1, 10)
+    c = random.randint(1, 10)
+    return (a*(x**b)) + c
+
+def logistic_func(x):
+    d = random.randint(1, 10)
+    b = random.randint(1, 10)
+    c = random.randint(1, 10)
+    return 1/(1 + c*np.exp(-b*x)) + d
+
+def exp_func(x):
+    a = random.randint(1, 10)
+    b = random.randint(1, 10)
+    c = random.randint(1, 10)
+    d = random.randint(1, 10)
+    return a * np.exp(-b * (x - c)) + d
+
+def sinusoidal_func(x):
+    a = random.randint(1, 10)
+    b = random.randint(1, 10)
+    c = random.randint(1, 10)
+    d = random.randint(1, 10)
+    return a * np.sin(b * (x - np.radians(c))) + d

@@ -13,10 +13,10 @@ class CausalEstimator:
     """
 
     def __init__(self, data, identified_estimand, treatment, outcome,
-                 control_value=0, treatment_value=1,
-                 test_significance=False, evaluate_effect_strength=False,
-                 confidence_intervals = False,
-                 target_units=None, effect_modifiers=None,
+                 function_type='linear', control_value=0,
+                 treatment_value=1, test_significance=False, evaluate_effect_strength=False,
+                 confidence_intervals=False,
+                 target_units=None, effect_modifiers=None, mediator=None,
                  params=None):
         """Initializes an estimator with data and names of relevant variables.
 
@@ -27,6 +27,8 @@ class CausalEstimator:
             representing the target identified estimand to estimate.
         :param treatment: name of the treatment variable
         :param outcome: name of the outcome variable
+        :param mediator: names of the mediator variable
+        :param function_type: function that describes the relationship between treatment and outcome
         :param control_value: Value of the treatment in the control group, for effect estimation.  If treatment is multi-variate, this can be a list.
         :param treatment_value: Value of the treatment in the treated group, for effect estimation. If treatment is multi-variate, this can be a list.
         :param test_significance: whether to test significance
@@ -43,6 +45,8 @@ class CausalEstimator:
         # Currently estimation methods only support univariate treatment and outcome
         self._treatment_name = treatment
         self._outcome_name = outcome[0] # assuming one-dimensional outcome
+        self._mediator_name = mediator
+        self._relation_function = function_type
         self._control_value = control_value
         self._treatment_value = treatment_value
         self._significance_test = test_significance
@@ -66,6 +70,12 @@ class CausalEstimator:
         if self._data is not None:
             self._treatment = self._data[self._treatment_name]
             self._outcome = self._data[self._outcome_name]
+
+        # Setting mediator values
+        if self._mediator_name:
+            self._mediator = self._data[self._mediator_name]
+            self.logger.debug("Mediator: " +
+                              ",".join(self._mediator_name))
 
         # Now saving the effect modifiers
         if self._effect_modifier_names:
