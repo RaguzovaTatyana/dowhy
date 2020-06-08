@@ -20,6 +20,7 @@ class CausalGraph:
                  common_cause_names=None,
                  instrument_names=None,
                  effect_modifier_names=None,
+                 mediator_name=None,
                  observed_node_names=None,
                  missing_nodes_as_confounders=False):
         self.treatment_name = parse_state(treatment_name)
@@ -27,12 +28,13 @@ class CausalGraph:
         instrument_names = parse_state(instrument_names)
         common_cause_names = parse_state(common_cause_names)
         effect_modifier_names = parse_state(effect_modifier_names)
+        mediator_name = parse_state(mediator_name)
         self.logger = logging.getLogger(__name__)
 
         if graph is None:
             self._graph = nx.DiGraph()
-            self._graph = self.build_graph(common_cause_names,
-                                           instrument_names, effect_modifier_names)
+            self._graph = self.build_graph(common_cause_names, instrument_names,
+                                           effect_modifier_names, mediator_name)
         elif re.match(r".*\.dot", graph):
             # load dot file
             try:
@@ -108,7 +110,7 @@ class CausalGraph:
             plt.savefig(out_filename)
             plt.draw()
 
-    def build_graph(self, common_cause_names, instrument_names, effect_modifier_names):
+    def build_graph(self, common_cause_names, instrument_names, effect_modifier_names, mediator):
         """ Creates nodes and edges based on variable names and their semantics.
         
         Currently only considers the graphical representation of "direct" effect modifiers. Thus, all effect modifiers are assumed to be "direct" unless otherwise expressed using a graph. Based on the taxonomy of effect modifiers by VanderWheele and Robins: "Four types of effect modification: A classification based on directed acyclic graphs. Epidemiology. 2007."
@@ -127,6 +129,14 @@ class CausalGraph:
                 for treatment, outcome in itertools.product(self.treatment_name, self.outcome_name):
                     self._graph.add_node(node_name, observed="yes")
                     self._graph.add_edge(node_name, treatment)
+                    self._graph.add_edge(node_name, outcome)
+
+        # Adding mediator
+        if mediator is not None:
+            for node_name in mediator:
+                self._graph.add_node(node_name, observed="yes")
+                for treatment, outcome in itertools.product(self.treatment_name, self.outcome_name):
+                    self._graph.add_edge(treatment, node_name)
                     self._graph.add_edge(node_name, outcome)
 
         # Adding instruments
@@ -246,6 +256,15 @@ class CausalGraph:
         for node in nodes1:
             modifiers = modifiers.difference(self.get_ancestors(node))
         return list(modifiers)
+
+    def get_mediators(self, nodes1, nodes2):
+        mediators = set()
+        for node in nodes2:
+            mediators = mediators.union(self.get_ancestors(node))
+        mediators = mediators.difference(nodes1)
+        for node in nodes1:
+            mediators = mediators.difference(self.get_descendants(node))
+        return list(mediators)
 
     def get_parents(self, node_name):
         return set(self._graph.predecessors(node_name))

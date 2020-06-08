@@ -26,7 +26,7 @@ class CausalModel:
 
     def __init__(self, data, treatment, outcome, graph=None,
                  common_causes=None, instruments=None,
-                 effect_modifiers=None,
+                 effect_modifiers=None, mediator=None,
                  estimand_type="nonparametric-ate",
                  proceed_when_unidentifiable=False,
                  missing_nodes_as_confounders=False,
@@ -49,6 +49,7 @@ class CausalModel:
         :param instruments: names of instrumental variables for the effect of
         treatment on outcome
         :param effect_modifiers: names of variables that can modify the treatment effect (useful for heterogeneous treatment effect estimation)
+        :param mediator: names of mediator between treatment and outcome
         :param estimand_type: the type of estimand requested (currently only "nonparametric-ate" is supported). In the future, may support other specific parametric forms of identification.
         :proceed_when_unidentifiable: does the identification proceed by ignoring potential unobserved confounders. Binary flag.
         :missing_nodes_as_confounders: Binary flag indicating whether variables in the dataframe that are not included in the causal graph, should be  automatically included as confounder nodes.
@@ -75,6 +76,7 @@ class CausalModel:
             self._common_causes = parse_state(common_causes)
             self._instruments = parse_state(instruments)
             self._effect_modifiers = parse_state(effect_modifiers)
+            self._mediator = parse_state(mediator)
             if common_causes is not None and instruments is not None:
                 self._graph = CausalGraph(
                     self._treatment,
@@ -82,6 +84,7 @@ class CausalModel:
                     common_cause_names=self._common_causes,
                     instrument_names=self._instruments,
                     effect_modifier_names = self._effect_modifiers,
+                    mediator_name=mediator,
                     observed_node_names=self._data.columns.tolist()
                 )
             elif common_causes is not None:
@@ -90,6 +93,7 @@ class CausalModel:
                     self._outcome,
                     common_cause_names=self._common_causes,
                     effect_modifier_names = self._effect_modifiers,
+                    mediator_name=mediator,
                     observed_node_names=self._data.columns.tolist()
                 )
             elif instruments is not None:
@@ -98,6 +102,7 @@ class CausalModel:
                     self._outcome,
                     instrument_names=self._instruments,
                     effect_modifier_names = self._effect_modifiers,
+                    mediator_name=mediator,
                     observed_node_names=self._data.columns.tolist()
                 )
             else:
@@ -118,6 +123,7 @@ class CausalModel:
             self._instruments = self._graph.get_instruments(self._treatment,
                                                             self._outcome)
             self._effect_modifiers = self._graph.get_effect_modifiers(self._treatment, self._outcome)
+            self._mediator = self._graph.get_mediators(self._treatment, self._outcome)
 
         self._other_variables = kwargs
         self.summary()
